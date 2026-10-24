@@ -1,5 +1,386 @@
-import React, { useEffect, useMemo, useState } from 'react'; import { createRoot } from 'react-dom/client'; import { Car, LogOut, Search, ShieldCheck, ShoppingBag, Sparkles } from 'lucide-react'; import './styles.css';
-type Vehicle={id:string;make:string;model:string;category:string;price:number;quantity:number;year?:number;imageUrl?:string;description?:string}; type Session={token:string;user:{name:string;role:string}};
-const API=import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'; const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
-function App(){const [session,setSession]=useState<Session|null>(()=>JSON.parse(localStorage.getItem('apex-session')??'null'));const [cars,setCars]=useState<Vehicle[]>([]);const [query,setQuery]=useState('');const [category,setCategory]=useState('');const [notice,setNotice]=useState('');const [mode,setMode]=useState<'login'|'register'>('login');const [form,setForm]=useState({name:'',email:'',password:''});const [adminOpen,setAdminOpen]=useState(false);const [newCar,setNewCar]=useState({make:'',model:'',category:'SUV',price:'',quantity:''});const headers=()=>({Authorization:`Bearer ${session?.token}`,'Content-Type':'application/json'}); const load=async()=>{if(!session)return;const r=await fetch(`${API}/vehicles`,{headers:headers()});if(r.ok)setCars((await r.json()).data)};useEffect(()=>{load()},[session]);const filtered=useMemo(()=>cars.filter(c=>`${c.make} ${c.model} ${c.category}`.toLowerCase().includes(query.toLowerCase())&&(!category||c.category===category)),[cars,query,category]);const submit=async(e:React.FormEvent)=>{e.preventDefault();const r=await fetch(`${API}/auth/${mode}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});const data=await r.json();if(!r.ok)return setNotice(data.message);localStorage.setItem('apex-session',JSON.stringify(data));setSession(data);setNotice(`Welcome, ${data.user.name}`)};const buy=async(id:string)=>{const r=await fetch(`${API}/vehicles/${id}/purchase`,{method:'POST',headers:headers()});const d=await r.json();setNotice(d.message);if(r.ok)load()};const addCar=async(e:React.FormEvent)=>{e.preventDefault();const r=await fetch(`${API}/vehicles`,{method:'POST',headers:headers(),body:JSON.stringify({...newCar,price:Number(newCar.price),quantity:Number(newCar.quantity)})});const d=await r.json();setNotice(d.message??(r.ok?'Vehicle added to inventory':'Could not add vehicle'));if(r.ok){setNewCar({make:'',model:'',category:'SUV',price:'',quantity:''});setAdminOpen(false);load()}};const remove=async(id:string)=>{if(!confirm('Remove this vehicle from the catalogue?'))return;const r=await fetch(`${API}/vehicles/${id}`,{method:'DELETE',headers:headers()});const d=await r.json();setNotice(d.message);if(r.ok)load()};if(!session)return <main className="auth-shell"><section className="hero"><p className="eyebrow"><Sparkles size={16}/> PREMIUM INVENTORY</p><h1>Find the car that moves your story forward.</h1><p>Apex Motors pairs a refined digital showroom with honest, live inventory.</p><div className="stats"><span><b>100%</b> transparent stock</span><span><b>24/7</b> showroom access</span></div></section><section className="auth-card"><Car className="brand"/><p className="eyebrow">APEX MOTORS</p><h2>{mode==='login'?'Welcome back':'Create your account'}</h2><form onSubmit={submit}>{mode==='register'&&<label>Name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>}<label>Email<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Password<input required minLength={8} type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></label><button>{mode==='login'?'Sign in to showroom':'Create account'}</button></form>{notice&&<p className="notice">{notice}</p>}<button className="link" onClick={()=>setMode(mode==='login'?'register':'login')}>{mode==='login'?'New here? Create an account':'Already registered? Sign in'}</button><small>Demo admin: admin@apexmotors.test / Admin123!</small></section></main>;
-return <main><nav><div className="logo"><Car/> APEX <i>MOTORS</i></div><div className="profile"><span>{session.user.name} {session.user.role==='admin'&&<ShieldCheck size={16}/>}</span><button className="icon" onClick={()=>{localStorage.removeItem('apex-session');setSession(null)}}><LogOut size={18}/></button></div></nav><header><p className="eyebrow">CURATED COLLECTION · 2026</p><h1>Drive something <em>remarkable.</em></h1><p>Every vehicle in our collection is available to reserve online.</p></header><section className="toolbar"><div className="search"><Search size={18}/><input placeholder="Search make, model or category" value={query} onChange={e=>setQuery(e.target.value)}/></div><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{[...new Set(cars.map(c=>c.category))].map(x=><option key={x}>{x}</option>)}</select>{session.user.role==='admin'&&<button className="admin-toggle" onClick={()=>setAdminOpen(!adminOpen)}>{adminOpen?'Close manager':'Manage inventory'}</button>}</section>{adminOpen&&<form className="admin-form" onSubmit={addCar}><strong>Add vehicle</strong>{(['make','model','price','quantity'] as const).map(k=><input key={k} required placeholder={k} value={newCar[k]} onChange={e=>setNewCar({...newCar,[k]:e.target.value})}/>)}<select value={newCar.category} onChange={e=>setNewCar({...newCar,category:e.target.value})}><option>SUV</option><option>Sedan</option><option>Electric</option><option>Hatchback</option><option>Luxury</option></select><button>Add to showroom</button></form>}{notice&&<p className="toast">{notice}</p>}<section className="catalogue">{filtered.map(c=><article className="vehicle" key={c.id}><img src={c.imageUrl} alt={`${c.make} ${c.model}`}/><div className="vehicle-body"><div className="vehicle-top"><span>{c.category} · {c.year}</span><span className={c.quantity?'stock':'stock sold'}>{c.quantity?`${c.quantity} in stock`:'Sold out'}</span></div><h2>{c.make} <em>{c.model}</em></h2><p>{c.description}</p><div className="vehicle-bottom"><b>{money(c.price)}</b>{session.user.role==='admin'?<button onClick={()=>remove(c.id)}>Remove</button>:<button disabled={!c.quantity} onClick={()=>buy(c.id)}><ShoppingBag size={16}/>{c.quantity?'Purchase':'Unavailable'}</button>}</div></div></article>)}</section></main>}; createRoot(document.getElementById('root')!).render(<App/>);
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Navbar } from './components/Navbar';
+import { ShowroomHero } from './components/ShowroomHero';
+import { ShowroomFilters } from './components/ShowroomFilters';
+import { VehicleCard } from './components/VehicleCard';
+import { VehicleDetailModal } from './components/VehicleDetailModal';
+import { AdminManager } from './components/AdminManager';
+import { PurchaseHistoryModal } from './components/PurchaseHistoryModal';
+import { AuthView } from './components/AuthView';
+import { Session, Vehicle, InventoryHealth, PurchaseRecord, FilterState } from './types';
+import './styles.css';
+
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+
+const initialFilters: FilterState = {
+  search: '',
+  brand: '',
+  category: '',
+  fuel: '',
+  maxPrice: '',
+  modelYear: '',
+  maxKm: '',
+  sortBy: 'price_asc'
+};
+
+export function App() {
+  const [session, setSession] = useState<Session | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('apex-session') ?? 'null');
+    } catch {
+      return null;
+    }
+  });
+
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [health, setHealth] = useState<InventoryHealth | null>(null);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [filters, setFilters] = useState<FilterState>(initialFilters);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [purchasesModalOpen, setPurchasesModalOpen] = useState(false);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const isAdmin = session?.user?.role === 'admin';
+
+  const headers = useCallback(() => {
+    return {
+      Authorization: `Bearer ${session?.token}`,
+      'Content-Type': 'application/json'
+    };
+  }, [session?.token]);
+
+  const loadData = useCallback(async () => {
+    if (!session?.token) return;
+
+    try {
+      const authHeaders = headers();
+      const vehiclePromise = fetch(`${API}/vehicles`, { headers: authHeaders });
+      const purchasesPromise = fetch(`${API}/purchases/me`, { headers: authHeaders });
+      const dashboardPromise = isAdmin
+        ? fetch(`${API}/dashboard`, { headers: authHeaders })
+        : Promise.resolve(null);
+
+      const [vRes, pRes, dRes] = await Promise.all([vehiclePromise, purchasesPromise, dashboardPromise]);
+
+      if (vRes.ok) {
+        const vData = await vRes.json();
+        setVehicles(vData.data || []);
+      }
+
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        setPurchases(pData.data || []);
+      }
+
+      if (dRes && dRes.ok) {
+        const dData = await dRes.json();
+        setHealth(dData.data || null);
+      }
+    } catch (err) {
+      console.error('Failed to load showroom data:', err);
+    }
+  }, [session?.token, isAdmin, headers]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Notice auto-dismiss timer
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // Client-side filtering & sorting for instant, fluid showroom responsiveness
+  const filteredVehicles = useMemo(() => {
+    return vehicles
+      .filter((v) => {
+        // Keyword match across make, model, category, city, and description
+        if (filters.search) {
+          const q = filters.search.toLowerCase().trim();
+          const target = `${v.make} ${v.model} ${v.category} ${v.city ?? ''} ${v.description ?? ''}`.toLowerCase();
+          if (!target.includes(q)) return false;
+        }
+
+        // Brand / Make filter
+        if (filters.brand && v.make.toLowerCase() !== filters.brand.toLowerCase()) {
+          return false;
+        }
+
+        // Category filter
+        if (filters.category && v.category.toLowerCase() !== filters.category.toLowerCase()) {
+          return false;
+        }
+
+        // Fuel Type filter
+        if (filters.fuel && (v.fuelType ?? 'Petrol').toLowerCase() !== filters.fuel.toLowerCase()) {
+          return false;
+        }
+
+        // Budget / Max Price filter
+        if (filters.maxPrice && v.price > Number(filters.maxPrice)) {
+          return false;
+        }
+
+        // Model Year filter
+        if (filters.modelYear && v.year && v.year < Number(filters.modelYear)) {
+          return false;
+        }
+
+        // KM Driven filter
+        if (filters.maxKm && v.kmsDriven !== undefined && v.kmsDriven > Number(filters.maxKm)) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (filters.sortBy === 'price_asc') return a.price - b.price;
+        if (filters.sortBy === 'price_desc') return b.price - a.price;
+        if (filters.sortBy === 'year_desc') return (b.year ?? 0) - (a.year ?? 0);
+        if (filters.sortBy === 'kms_asc') return (a.kmsDriven ?? 0) - (b.kmsDriven ?? 0);
+        return 0;
+      });
+  }, [vehicles, filters]);
+
+  // Purchase Action with Concurrency Safety
+  const handlePurchase = async (vehicle: Vehicle) => {
+    setIsPurchasing(true);
+    try {
+      const res = await fetch(`${API}/vehicles/${vehicle.id}/purchase`, {
+        method: 'POST',
+        headers: headers()
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.message || 'Vehicle is currently unavailable for purchase.');
+        return;
+      }
+
+      setNotice(`Congratulations! Your purchase of the ${vehicle.make} ${vehicle.model} has been confirmed.`);
+      if (selectedVehicle?.id === vehicle.id) {
+        setSelectedVehicle(null);
+      }
+      await loadData();
+    } catch {
+      setNotice('Purchase transaction failed. Please check your connection.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  // Admin: Add Vehicle
+  const handleAddVehicle = async (vehicleData: Partial<Vehicle>): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API}/vehicles`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(vehicleData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.message || 'Could not add vehicle.');
+        return false;
+      }
+      setNotice(`Added ${data.data.make} ${data.data.model} to inventory.`);
+      await loadData();
+      return true;
+    } catch {
+      setNotice('Failed to add vehicle.');
+      return false;
+    }
+  };
+
+  // Admin: Update Vehicle
+  const handleUpdateVehicle = async (id: string, vehicleData: Partial<Vehicle>): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API}/vehicles/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(vehicleData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.message || 'Could not update vehicle.');
+        return false;
+      }
+      setNotice(`Updated ${data.data.make} ${data.data.model}.`);
+      await loadData();
+      return true;
+    } catch {
+      setNotice('Failed to update vehicle.');
+      return false;
+    }
+  };
+
+  // Admin: Restock Vehicle
+  const handleRestock = async (id: string, quantity: number): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API}/vehicles/${id}/restock`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ quantity })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.message || 'Could not restock vehicle.');
+        return false;
+      }
+      setNotice(`Restocked ${data.data.make} ${data.data.model}. New quantity: ${data.data.quantity}.`);
+      await loadData();
+      return true;
+    } catch {
+      setNotice('Failed to restock vehicle.');
+      return false;
+    }
+  };
+
+  // Admin: Delete Vehicle
+  const handleDelete = async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API}/vehicles/${id}`, {
+        method: 'DELETE',
+        headers: headers()
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.message || 'Could not remove vehicle.');
+        return false;
+      }
+      setNotice('Vehicle removed from inventory.');
+      await loadData();
+      return true;
+    } catch {
+      setNotice('Failed to delete vehicle.');
+      return false;
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('apex-session');
+    setSession(null);
+  };
+
+  if (!session) {
+    return <AuthView onAuthenticated={setSession} apiBase={API} />;
+  }
+
+  return (
+    <main className="min-h-screen flex flex-col bg-[#f5f3ee]">
+      <Navbar
+        session={session}
+        onLogout={handleLogout}
+        adminOpen={adminOpen}
+        onToggleAdmin={() => setAdminOpen(!adminOpen)}
+        onOpenPurchases={() => setPurchasesModalOpen(true)}
+        purchaseCount={purchases.length}
+      />
+
+      <ShowroomHero isAdmin={isAdmin} health={health} />
+
+      {/* Global Toast Notification */}
+      {notice && (
+        <div className="px-5">
+          <div className="toast-notification">
+            <span>{notice}</span>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-[#174b39] hover:text-[#c96535] font-bold text-sm ml-4"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Operational Management Console */}
+      {isAdmin && adminOpen && (
+        <AdminManager
+          vehicles={vehicles}
+          health={health}
+          onAddVehicle={handleAddVehicle}
+          onUpdateVehicle={handleUpdateVehicle}
+          onRestockVehicle={handleRestock}
+          onDeleteVehicle={handleDelete}
+          onClose={() => setAdminOpen(false)}
+        />
+      )}
+
+      {/* Showroom Discovery & Filter Controls */}
+      <ShowroomFilters
+        filters={filters}
+        onChange={(updated) => setFilters((prev) => ({ ...prev, ...updated }))}
+        onReset={() => setFilters(initialFilters)}
+        vehicles={vehicles}
+        totalResults={filteredVehicles.length}
+      />
+
+      {/* Showroom Vehicle Grid */}
+      <section className="catalogue-grid" aria-label="Available Vehicles">
+        {filteredVehicles.length === 0 ? (
+          <div className="col-span-full py-16 text-center space-y-3 bg-white border border-[#e3dfd6] p-8 rounded-sm">
+            <h3 className="font-serif text-2xl font-bold text-[#183c32]">No matching vehicles found</h3>
+            <p className="text-xs text-[#67706a] max-w-md mx-auto">
+              We couldn't find any vehicles matching your current search and filter combination. Try adjusting your
+              budget, brand, or mileage criteria.
+            </p>
+            <button
+              onClick={() => setFilters(initialFilters)}
+              className="px-4 py-2 bg-[#183c32] text-white text-xs font-mono uppercase tracking-wider rounded-sm hover:bg-[#235447] transition-colors"
+            >
+              Reset All Filters
+            </button>
+          </div>
+        ) : (
+          filteredVehicles.map((vehicle) => (
+            <VehicleCard
+              key={vehicle.id}
+              vehicle={vehicle}
+              isAdmin={isAdmin}
+              onOpenDetails={(v) => setSelectedVehicle(v)}
+              onPurchase={handlePurchase}
+              onEdit={(v) => {
+                setAdminOpen(true);
+                window.scrollTo({ top: 300, behavior: 'smooth' });
+              }}
+              onRestock={(v) => {
+                setAdminOpen(true);
+                window.scrollTo({ top: 300, behavior: 'smooth' });
+              }}
+              onDelete={(v) => handleDelete(v.id)}
+              isPurchasing={isPurchasing}
+            />
+          ))
+        )}
+      </section>
+
+      {/* Buyer-Facing Vehicle Detail View / Modal */}
+      <VehicleDetailModal
+        vehicle={selectedVehicle}
+        onClose={() => setSelectedVehicle(null)}
+        onPurchase={handlePurchase}
+        isPurchasing={isPurchasing}
+      />
+
+      {/* Customer Purchase History Modal */}
+      {purchasesModalOpen && (
+        <PurchaseHistoryModal
+          purchases={purchases}
+          onClose={() => setPurchasesModalOpen(false)}
+          loading={purchasesLoading}
+        />
+      )}
+    </main>
+  );
+}
+
+const rootEl = document.getElementById('root');
+if (rootEl) {
+  createRoot(rootEl).render(<App />);
+}
