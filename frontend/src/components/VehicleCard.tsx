@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Gauge, Fuel, MapPin, ShoppingBag, Eye, Edit3, PlusCircle, Trash2 } from 'lucide-react';
 import { Vehicle } from '../types';
+import { formatMoney, formatKm } from '../utils';
 
 interface VehicleCardProps {
   vehicle: Vehicle;
@@ -25,15 +26,6 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
 }) => {
   const isAvailable = vehicle.quantity > 0;
 
-  const formatMoney = (n: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(n);
-
-  const formatKm = (km?: number) =>
-    km !== undefined && km !== null ? `${new Intl.NumberFormat('en-IN').format(km)} km` : 'Pre-owned';
 
   return (
     <article className="vehicle-card group" data-testid={`vehicle-card-${vehicle.id}`}>

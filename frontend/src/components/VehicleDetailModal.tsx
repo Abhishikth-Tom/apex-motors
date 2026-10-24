@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { X, ShieldCheck, Check, Calendar, Gauge, Fuel, MapPin, ShoppingBag, Award, Sparkles } from 'lucide-react';
 import { Vehicle } from '../types';
+import { formatMoney, formatKm } from '../utils';
 
 interface VehicleDetailModalProps {
   vehicle: Vehicle | null;
@@ -26,16 +27,6 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
   if (!vehicle) return null;
 
   const isAvailable = vehicle.quantity > 0;
-
-  const formatMoney = (n: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(n);
-
-  const formatKm = (km?: number) =>
-    km !== undefined && km !== null ? `${new Intl.NumberFormat('en-IN').format(km)} km` : 'Pre-owned';
 
   return (
     <div

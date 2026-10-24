@@ -1,2 +1,11 @@
-import 'dotenv/config'; import { createApp } from './app.js'; import { openDb, seed } from './db.js';
-const db=openDb(); await seed(db); createApp(db).listen(process.env.PORT ?? 4000, () => console.log('Apex Motors API running on port 4000'));
+import 'dotenv/config';
+import { createApp } from './app.js';
+import { openDb, seed } from './db.js';
+
+const db = openDb();
+await seed(db);
+
+const PORT = process.env.PORT ?? 4000;
+createApp(db).listen(PORT, () => {
+  console.log(`Apex Motors API running on http://localhost:${PORT}`);
+});
