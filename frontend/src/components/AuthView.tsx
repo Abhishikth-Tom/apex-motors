@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car, Sparkles, Shield, ArrowRight, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { Car, Sparkles, Shield, ArrowRight, CheckCircle2, UserCheck } from 'lucide-react';
 import { Session } from '../types';
 
 interface AuthViewProps {
@@ -70,10 +70,10 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
 
   return (
     <main className="auth-shell">
-      {/* Editorial Hero Branding */}
+      {/* Editorial Luxury Hero Panel */}
       <section className="hero">
         <span className="eyebrow">
-          <Sparkles size={16} /> CERTIFIED INVENTORY
+          <Sparkles size={16} /> CERTIFIED USED-CAR SHOWROOM
         </span>
         <h1>Find the car that moves your story forward.</h1>
         <p>
@@ -84,7 +84,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
         <div className="stats">
           <div>
             <b>160+</b>
-            <span>Multi-Point Checklist</span>
+            <span>Inspection Points</span>
           </div>
           <div>
             <b>100%</b>
@@ -92,24 +92,33 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
           </div>
           <div>
             <b>1-Year</b>
-            <span>Comprehensive Warranty</span>
+            <span>Apex Warranty</span>
           </div>
+        </div>
+
+        <div className="mt-12 flex items-center gap-4 text-xs font-mono text-[#a8beaf]">
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 size={15} className="text-[#c96535]" /> Verified RC Transfer
+          </span>
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 size={15} className="text-[#c96535]" /> Non-Accidental Certified
+          </span>
         </div>
       </section>
 
-      {/* Auth Card Panel */}
+      {/* Auth Card Form Panel */}
       <section className="auth-card">
         <div className="flex items-center gap-2 mb-2">
           <Car className="brand" />
           <span className="font-mono text-xs tracking-widest uppercase text-[#183c32] font-bold">
-            Apex Motors Showroom
+            Apex Motors
           </span>
         </div>
 
         <h2>{isRegister ? 'Create Client Account' : 'Welcome to the Showroom'}</h2>
 
         {errorMessage && (
-          <div className="p-3 mb-4 text-xs bg-rose-50 border border-rose-200 text-rose-800 rounded-sm">
+          <div className="p-3 mb-4 text-xs bg-rose-50 border border-rose-300 text-rose-800 rounded-sm">
             {errorMessage}
           </div>
         )}
@@ -118,15 +127,13 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
           {isRegister && (
             <label>
               Full Name
-              <div className="relative">
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Mira Nair"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </div>
+              <input
+                required
+                type="text"
+                placeholder="e.g. Mira Nair"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </label>
           )}
 
@@ -135,7 +142,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
             <input
               required
               type="email"
-              placeholder="e.g. client@apexmotors.test"
+              placeholder="e.g. customer@apexmotors.test"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -161,7 +168,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
 
         <button
           type="button"
-          className="link mt-4 text-left"
+          className="link"
           onClick={() => {
             setIsRegister(!isRegister);
             setErrorMessage('');
@@ -170,30 +177,32 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthenticated, apiBase }) 
           {isRegister ? 'Already registered? Sign in instead' : "Don't have an account? Register as client"}
         </button>
 
-        {/* Quick Demo Pre-fill Shortcuts */}
-        <div className="mt-8 pt-6 border-t border-[#ddd9cf]/70 text-xs">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-[#68736d] block mb-2">
-            Instant Demo Sign-in
+        {/* 1-Click Demo Pre-fill Shortcuts */}
+        <div className="demo-box">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-[#68736d] block mb-2 font-semibold">
+            One-Click Demo Access
           </span>
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               type="button"
               onClick={() => handleDemoLogin('admin@apexmotors.test', 'Admin123!')}
-              className="flex-1 p-2 text-left bg-white border border-[#ddd9cf] hover:border-[#183c32] rounded-sm transition-colors"
+              className="demo-btn"
             >
-              <div className="font-semibold text-[#183c32] flex items-center gap-1">
-                <Shield size={12} className="text-[#c96535]" /> Administrator
+              <div className="font-semibold text-[#183c32] flex items-center gap-1.5 text-xs">
+                <Shield size={13} className="text-[#c96535]" /> Administrator
               </div>
-              <div className="text-[10px] font-mono text-[#68736d]">admin@apexmotors.test</div>
+              <div className="text-[10px] font-mono text-[#68736d] mt-0.5">admin@apexmotors.test</div>
             </button>
 
             <button
               type="button"
               onClick={() => handleDemoLogin('customer@apexmotors.test', 'Customer123!')}
-              className="flex-1 p-2 text-left bg-white border border-[#ddd9cf] hover:border-[#183c32] rounded-sm transition-colors"
+              className="demo-btn"
             >
-              <div className="font-semibold text-[#183c32]">Demo Customer</div>
-              <div className="text-[10px] font-mono text-[#68736d]">customer@apexmotors.test</div>
+              <div className="font-semibold text-[#183c32] flex items-center gap-1.5 text-xs">
+                <UserCheck size={13} className="text-emerald-700" /> Demo Customer
+              </div>
+              <div className="text-[10px] font-mono text-[#68736d] mt-0.5">customer@apexmotors.test</div>
             </button>
           </div>
         </div>
