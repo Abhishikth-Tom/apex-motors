@@ -11,7 +11,7 @@ import { AuthView } from './components/AuthView';
 import { Session, Vehicle, InventoryHealth, PurchaseRecord, FilterState } from './types';
 import './styles.css';
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 
 const initialFilters: FilterState = {
   search: '',
