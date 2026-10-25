@@ -41,7 +41,16 @@ export function App() {
       return [];
     }
   });
-  const [health, setHealth] = useState<InventoryHealth | null>(null);
+  // Derive inventory health directly from local vehicles state so metrics are always live
+  const health = useMemo<InventoryHealth | null>(() => {
+    if (vehicles.length === 0) return null;
+    const models = vehicles.length;
+    const units = vehicles.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0);
+    const value = vehicles.reduce((sum, v) => sum + (Number(v.quantity) || 0) * (Number(v.price) || 0), 0);
+    const lowStock = vehicles.filter((v) => Number(v.quantity) >= 1 && Number(v.quantity) <= 2).length;
+    const soldOut = vehicles.filter((v) => Number(v.quantity) === 0).length;
+    return { models, units, value, lowStock, soldOut };
+  }, [vehicles]);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
       const cur = JSON.parse(localStorage.getItem('apex-session') ?? 'null');
@@ -96,11 +105,8 @@ export function App() {
       const authHeaders = headers();
       const vehiclePromise = fetch(`${API}/vehicles`, { headers: authHeaders });
       const purchasesPromise = fetch(`${API}/purchases/me`, { headers: authHeaders });
-      const dashboardPromise = isAdmin
-        ? fetch(`${API}/dashboard`, { headers: authHeaders })
-        : Promise.resolve(null);
 
-      const [vRes, pRes, dRes] = await Promise.all([vehiclePromise, purchasesPromise, dashboardPromise]);
+      const [vRes, pRes] = await Promise.all([vehiclePromise, purchasesPromise]);
 
       if (vRes.ok) {
         const vData = await vRes.json();
@@ -170,15 +176,10 @@ export function App() {
           }).catch(() => {});
         }
       }
-
-      if (dRes && dRes.ok) {
-        const dData = await dRes.json();
-        setHealth(dData.data || null);
-      }
     } catch (err) {
       console.error('Failed to load showroom data:', err);
     }
-  }, [session?.token, session?.user?.id, isAdmin, headers]);
+  }, [session?.token, session?.user?.id, headers]);
 
   useEffect(() => {
     loadData();
@@ -400,25 +401,7 @@ export function App() {
         return updated;
       });
 
-      // Immediately update dashboard inventory health so total units and valuation update on screen
-      setHealth((prev) => {
-        if (!prev) return null;
-        const newQty = data.data.quantity;
-        const oldQty = newQty - quantity;
-        const wasSoldOut = oldQty === 0;
-        const wasLowStock = oldQty >= 1 && oldQty <= 2;
-        const isNowLowStock = newQty >= 1 && newQty <= 2;
-        const isNowSoldOut = newQty === 0;
-
-        return {
-          ...prev,
-          units: prev.units + quantity,
-          value: prev.value + quantity * (data.data.price || 0),
-          lowStock: Math.max(0, prev.lowStock - (wasLowStock ? 1 : 0) + (isNowLowStock ? 1 : 0)),
-          soldOut: Math.max(0, prev.soldOut - (wasSoldOut ? 1 : 0) + (isNowSoldOut ? 1 : 0))
-        };
-      });
-
+      // health is derived from vehicles via useMemo — no manual update needed
       await loadData();
       return true;
     } catch {
