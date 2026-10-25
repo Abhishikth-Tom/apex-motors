@@ -248,9 +248,22 @@ export function App() {
   const handlePurchase = async (vehicle: Vehicle) => {
     setIsPurchasing(true);
     try {
+      const authHeaders = headers();
+
+      // Sync current local inventory to the server BEFORE the purchase call,
+      // so the server-side stock check sees the correct (locally-tracked) quantity
+      const localVehicles: Vehicle[] = JSON.parse(localStorage.getItem('apex-inventory-vehicles') || '[]');
+      if (localVehicles.length > 0) {
+        await fetch(`${API}/vehicles/sync`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ vehicles: localVehicles })
+        }).catch(() => {});
+      }
+
       const res = await fetch(`${API}/vehicles/${vehicle.id}/purchase`, {
         method: 'POST',
-        headers: headers()
+        headers: authHeaders
       });
 
       const data = await res.json();
@@ -276,28 +289,23 @@ export function App() {
       if (userId) {
         const storageKey = `apex-purchases-${userId}`;
         let currentList: PurchaseRecord[] = [];
-        try {
-          currentList = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        } catch {}
-        const updated = [newPurchase, ...currentList.filter((p) => p.id !== newPurchase.id)];
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-        setPurchases(updated);
+        try { currentList = JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch {}
+        const updatedPurchases = [newPurchase, ...currentList.filter((p) => p.id !== newPurchase.id)];
+        localStorage.setItem(storageKey, JSON.stringify(updatedPurchases));
+        setPurchases(updatedPurchases);
       }
 
-      // Update local vehicle stock immediately so buyer and admin views reflect it instantly
-      setVehicles((prev) => {
-        const updated = prev.map((v) => (v.id === vehicle.id ? { ...v, quantity: Math.max(0, v.quantity - 1) } : v));
-        try {
-          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
+      // Update local vehicle stock immediately — sequential, not inside setState
+      const updatedVehicles = localVehicles.map((v) =>
+        v.id === vehicle.id ? { ...v, quantity: Math.max(0, Number(v.quantity) - 1) } : v
+      );
+      try { localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updatedVehicles)); } catch {}
+      setVehicles(updatedVehicles);
 
       setNotice(`Congratulations! Your purchase of the ${vehicle.make} ${vehicle.model} has been confirmed.`);
       if (selectedVehicle?.id === vehicle.id) {
         setSelectedVehicle(null);
       }
-      // Do NOT call loadData() here — it races against stale serverless state and can drop locally-added vehicles
     } catch {
       setNotice('Purchase transaction failed. Please check your connection.');
     } finally {
@@ -318,27 +326,21 @@ export function App() {
         setNotice(data.message || 'Could not add vehicle.');
         return false;
       }
+
+      // Compute updated list, persist, then sync — all as sequential steps (not inside setState)
+      const currentVehicles: Vehicle[] = JSON.parse(localStorage.getItem('apex-inventory-vehicles') || '[]');
+      const updatedVehicles = [data.data, ...currentVehicles.filter((v) => v.id !== data.data.id)];
+      try { localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updatedVehicles)); } catch {}
+      setVehicles(updatedVehicles);
+
+      // Sync full list to server so restock/purchase calls on any Lambda instance find this vehicle
+      fetch(`${API}/vehicles/sync`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ vehicles: updatedVehicles })
+      }).catch(() => {});
+
       setNotice(`Added ${data.data.make} ${data.data.model} to inventory.`);
-
-      // Update state and persistent cache immediately
-      setVehicles((prev) => {
-        const updated = [data.data, ...prev.filter((v) => v.id !== data.data.id)];
-        try {
-          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
-        } catch {}
-
-        // Sync the full list (including new vehicle) to the server so restock/purchase
-        // calls on any Lambda instance can find this vehicle by ID
-        fetch(`${API}/vehicles/sync`, {
-          method: 'POST',
-          headers: headers(),
-          body: JSON.stringify({ vehicles: updated })
-        }).catch(() => {});
-
-        return updated;
-      });
-
-      // Do NOT call loadData() here — it races against stale serverless state
       return true;
     } catch {
       setNotice('Failed to add vehicle.');
@@ -359,18 +361,13 @@ export function App() {
         setNotice(data.message || 'Could not update vehicle.');
         return false;
       }
+
+      const currentVehicles: Vehicle[] = JSON.parse(localStorage.getItem('apex-inventory-vehicles') || '[]');
+      const updatedVehicles = currentVehicles.map((v) => (v.id === id ? data.data : v));
+      try { localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updatedVehicles)); } catch {}
+      setVehicles(updatedVehicles);
+
       setNotice(`Updated ${data.data.make} ${data.data.model}.`);
-
-      // Update state and persistent cache immediately
-      setVehicles((prev) => {
-        const updated = prev.map((v) => (v.id === id ? data.data : v));
-        try {
-          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
-        } catch {}
-        return updated;
-      });
-
-      // Do NOT call loadData() here — it races against stale serverless state
       return true;
     } catch {
       setNotice('Failed to update vehicle.');
@@ -391,30 +388,26 @@ export function App() {
         setNotice(data.message || 'Could not restock vehicle.');
         return false;
       }
-      // Immediately update vehicles state — use local quantity + delta, not server's (may be stale)
-      setVehicles((prev) => {
-        const updated = prev.map((v) =>
-          v.id === id ? { ...v, quantity: Number(v.quantity) + quantity } : v
-        );
-        try {
-          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
-        } catch {}
 
-        const restocked = updated.find((v) => v.id === id);
-        setNotice(`Restocked ${restocked?.make ?? data.data.make} ${restocked?.model ?? data.data.model}. New quantity: ${restocked?.quantity ?? data.data.quantity}.`);
+      // Compute locally: add delta to current local quantity (server quantity may be stale)
+      const currentVehicles: Vehicle[] = JSON.parse(localStorage.getItem('apex-inventory-vehicles') || '[]');
+      const updatedVehicles = currentVehicles.map((v) =>
+        v.id === id ? { ...v, quantity: Number(v.quantity) + quantity } : v
+      );
+      try { localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updatedVehicles)); } catch {}
+      setVehicles(updatedVehicles);
 
-        // Sync updated vehicles array to server in background
-        fetch(`${API}/vehicles/sync`, {
-          method: 'POST',
-          headers: headers(),
-          body: JSON.stringify({ vehicles: updated })
-        }).catch(() => {});
+      const restocked = updatedVehicles.find((v) => v.id === id);
+      setNotice(`Restocked ${restocked?.make ?? data.data.make} ${restocked?.model ?? data.data.model}. New quantity: ${restocked?.quantity ?? data.data.quantity}.`);
 
-        return updated;
-      });
+      // Sync updated quantities to server so the next purchase call sees correct stock
+      fetch(`${API}/vehicles/sync`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ vehicles: updatedVehicles })
+      }).catch(() => {});
 
-      // health is derived from vehicles via useMemo — no manual update needed
-      // Do NOT call loadData() here — it races against stale serverless state and drops locally-added vehicles
+      // health is derived from vehicles via useMemo — updates automatically
       return true;
     } catch {
       setNotice('Failed to restock vehicle.');
