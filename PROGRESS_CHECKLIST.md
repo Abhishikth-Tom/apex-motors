@@ -19,12 +19,9 @@
 - [x] Manually tested customer and administrator journeys via browser subagent.
 - [x] Captured 6 real screenshots under `screenshots/` and embedded them in `README.md`.
 - [x] Updated `TEST_REPORT.md` and `README.md` with complete documentation, architecture, and AI usage statement.
-
-## Ready for Submission
-
-- [ ] Push to a public GitHub/GitLab repository and submit its link.
-- [ ] Review `PROMPTS.md` and ensure public raw chat links meet assessor requirements.
-- [ ] Optional: deploy frontend/API and add live deployment link to README.
+- [x] Push to a public GitHub/GitLab repository and submit its link.
+- [x] Review `PROMPTS.md` and ensure public raw chat links meet assessor requirements.
+- [x] Optional: deploy frontend/API and add live deployment link to README.
 
 ## Verification Commands
 
