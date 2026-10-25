@@ -87,6 +87,44 @@ npm run dev
 
 ---
 
+## Deployment Guide
+
+### Deploying the Frontend to Vercel
+
+The frontend is configured for zero-friction deployment on [Vercel](https://vercel.com):
+
+1. **Import Repository**:
+   - Visit [vercel.com/new](https://vercel.com/new).
+   - Select or import the GitHub repository: `https://github.com/Abhishikth-Tom/apex-motors`.
+2. **Project Settings**:
+   - The repository includes [`vercel.json`](vercel.json) at the root, which automatically directs Vercel to:
+     - **Build Command**: `npm run build --workspace=frontend`
+     - **Output Directory**: `frontend/dist`
+     - **Routing**: Single Page Application (SPA) catch-all rewrite to `/index.html` (prevents 404s on browser reloads).
+   - *If configuring manually or setting **Root Directory** to `frontend`*, the included [`frontend/vercel.json`](frontend/vercel.json) handles builds identically.
+3. **Environment Variables**:
+   - Add `VITE_API_URL` pointing to your live backend endpoint (e.g., `https://apex-motors-api.onrender.com/api`).
+   - *(If left blank, it defaults to `http://localhost:4000/api` for local hybrid testing).*
+4. **Deploy**:
+   - Click **Deploy**. Vercel builds the production bundle and generates an instant SSL-enabled live URL (e.g., `https://apex-motors.vercel.app`).
+
+### Deploying the Backend API (Render / Persistent Node Host)
+
+Because the backend utilizes SQLite with ACID transactions and native compiled bindings (`better-sqlite3`), it requires a stateful Node.js host rather than read-only serverless lambdas:
+
+1. **Deploy to Render**:
+   - Visit [dashboard.render.com](https://dashboard.render.com) and create a **New Web Service** connected to `Abhishikth-Tom/apex-motors`.
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm run start --workspace=backend`
+   - **Environment Variables**:
+     - `NODE_ENV`: `production`
+     - `PORT`: `10000`
+     - `JWT_SECRET`: *(random 32+ character secret)*
+   *(Or deploy automatically using the included [`render.yaml`](render.yaml) blueprint).*
+2. Set `VITE_API_URL` in your Vercel project environment variables to `<YOUR_RENDER_URL>/api` and trigger a redeploy in Vercel.
+
+---
+
 ## REST API Specification
 
 | Domain | Method & Path | Access | Description |

@@ -21,7 +21,8 @@
 - [x] Updated `TEST_REPORT.md` and `README.md` with complete documentation, architecture, and AI usage statement.
 - [x] Push to a public GitHub/GitLab repository and submit its link.
 - [x] Review `PROMPTS.md` and ensure public raw chat links meet assessor requirements.
-- [x] Optional: deploy frontend/API and add live deployment link to README.
+- [x] Configured zero-friction Vercel deployment (`vercel.json` & `frontend/vercel.json`) and Render backend blueprint (`render.yaml`).
+- [ ] Deploy on Vercel dashboard.
 
 ## Verification Commands
 
