@@ -331,6 +331,11 @@ export function createApp(db: Db) {
     res.json({ data: rows });
   });
 
+  // Protected: client-side sync fallback
+  app.post('/api/purchases/sync', auth, (_req, res) => {
+    res.json({ success: true });
+  });
+
   // Protected: Operational health dashboard
   app.get('/api/dashboard', auth, admin, (_req, res) => {
     const totals: any = db.prepare(`

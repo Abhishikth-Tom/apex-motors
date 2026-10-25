@@ -35,7 +35,18 @@ export function App() {
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [health, setHealth] = useState<InventoryHealth | null>(null);
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
+    try {
+      const cur = JSON.parse(localStorage.getItem('apex-session') ?? 'null');
+      if (cur?.user?.id) {
+        const saved = localStorage.getItem(`apex-purchases-${cur.user.id}`);
+        return saved ? JSON.parse(saved) : [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -46,6 +57,21 @@ export function App() {
 
   const isAdmin = session?.user?.role === 'admin';
 
+  // Re-hydrate purchase history whenever session user changes
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setPurchases([]);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(`apex-purchases-${userId}`);
+      if (saved) {
+        setPurchases(JSON.parse(saved));
+      }
+    } catch {}
+  }, [session?.user?.id]);
+
   const headers = useCallback(() => {
     return {
       Authorization: `Bearer ${session?.token}`,
@@ -55,6 +81,9 @@ export function App() {
 
   const loadData = useCallback(async () => {
     if (!session?.token) return;
+
+    const userId = session?.user?.id;
+    const storageKey = userId ? `apex-purchases-${userId}` : null;
 
     try {
       const authHeaders = headers();
@@ -73,7 +102,36 @@ export function App() {
 
       if (pRes.ok) {
         const pData = await pRes.json();
-        setPurchases(pData.data || []);
+        const serverPurchases: PurchaseRecord[] = pData.data || [];
+
+        // Load local purchases to merge and preserve across serverless container recycles
+        let localPurchases: PurchaseRecord[] = [];
+        if (storageKey) {
+          try {
+            localPurchases = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          } catch {}
+        }
+
+        const map = new Map<string, PurchaseRecord>();
+        localPurchases.forEach((p) => map.set(p.id, p));
+        serverPurchases.forEach((p) => map.set(p.id, p));
+        const merged = Array.from(map.values()).sort((a, b) =>
+          b.purchased_at.localeCompare(a.purchased_at)
+        );
+
+        setPurchases(merged);
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(merged));
+        }
+
+        // Sync local purchases to server if server container was spun down
+        if (merged.length > serverPurchases.length) {
+          fetch(`${API}/purchases/sync`, {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ purchases: merged })
+          }).catch(() => {});
+        }
       }
 
       if (dRes && dRes.ok) {
@@ -83,7 +141,7 @@ export function App() {
     } catch (err) {
       console.error('Failed to load showroom data:', err);
     }
-  }, [session?.token, isAdmin, headers]);
+  }, [session?.token, session?.user?.id, isAdmin, headers]);
 
   useEffect(() => {
     loadData();
@@ -161,6 +219,31 @@ export function App() {
       if (!res.ok) {
         setNotice(data.message || 'Vehicle is currently unavailable for purchase.');
         return;
+      }
+
+      // Store purchase immediately in localStorage to guarantee persistence across logouts
+      const newPurchase: PurchaseRecord = data.purchase || {
+        id: data.data?.id || `ord-${Date.now()}`,
+        purchased_at: new Date().toISOString(),
+        price: vehicle.price,
+        make: vehicle.make,
+        model: vehicle.model,
+        category: vehicle.category,
+        fuelType: vehicle.fuelType,
+        city: vehicle.city,
+        imageUrl: vehicle.imageUrl
+      };
+
+      const userId = session?.user?.id;
+      if (userId) {
+        const storageKey = `apex-purchases-${userId}`;
+        let currentList: PurchaseRecord[] = [];
+        try {
+          currentList = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        } catch {}
+        const updated = [newPurchase, ...currentList.filter((p) => p.id !== newPurchase.id)];
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        setPurchases(updated);
       }
 
       setNotice(`Congratulations! Your purchase of the ${vehicle.make} ${vehicle.model} has been confirmed.`);

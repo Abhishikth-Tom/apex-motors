@@ -3,6 +3,8 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Types
 type Claims = {
@@ -34,8 +36,8 @@ const mapVehicle = (v: any) =>
     createdAt: v.created_at
   };
 
-// In-Memory Database for Serverless Execution
-const users: any[] = [
+// Seed Data
+const initialUsers: any[] = [
   {
     id: 'admin-001',
     name: 'Apex Administrator',
@@ -54,7 +56,7 @@ const users: any[] = [
   }
 ];
 
-const vehicles: any[] = [
+const initialVehicles: any[] = [
   {
     id: 'car-001',
     make: 'Tata',
@@ -102,7 +104,40 @@ const vehicles: any[] = [
   }
 ];
 
+const users: any[] = [...initialUsers];
+const vehicles: any[] = [...initialVehicles];
 const purchases: any[] = [];
+
+// Persistent storage in serverless container /tmp directory
+const STORE_FILE = path.join('/tmp', 'apex-store.json');
+
+function saveStore() {
+  try {
+    fs.writeFileSync(STORE_FILE, JSON.stringify({ users, vehicles, purchases }), 'utf8');
+  } catch {}
+}
+
+function loadStore() {
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        users.length = 0;
+        users.push(...data.users);
+      }
+      if (Array.isArray(data.vehicles) && data.vehicles.length > 0) {
+        vehicles.length = 0;
+        vehicles.push(...data.vehicles);
+      }
+      if (Array.isArray(data.purchases)) {
+        purchases.length = 0;
+        purchases.push(...data.purchases);
+      }
+    }
+  } catch {}
+}
+
+loadStore();
 
 // Initialize Express App
 const app = express();
@@ -169,6 +204,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
   };
 
   users.push(user);
+  saveStore();
 
   const payload = { id: user.id, name: user.name, email: user.email, role: user.role };
   res.status(201).json({
@@ -283,6 +319,7 @@ app.post('/api/vehicles', auth, admin, (req: Request, res: Response) => {
   };
 
   vehicles.push(newVehicle);
+  saveStore();
   res.status(201).json({ data: mapVehicle(newVehicle) });
 });
 
@@ -315,6 +352,7 @@ app.put('/api/vehicles/:id', auth, admin, (req: Request, res: Response) => {
   old.image_url = b.imageUrl !== undefined ? b.imageUrl?.trim() : (b.image_url !== undefined ? b.image_url?.trim() : old.image_url);
   old.description = b.description !== undefined ? b.description?.trim() : old.description;
 
+  saveStore();
   res.json({ data: mapVehicle(old) });
 });
 
@@ -325,6 +363,7 @@ app.delete('/api/vehicles/:id', auth, admin, (req: Request, res: Response) => {
     return res.status(404).json({ message: 'Vehicle not found' });
   }
   vehicles.splice(idx, 1);
+  saveStore();
   res.json({ message: 'Vehicle deleted' });
 });
 
@@ -341,6 +380,7 @@ app.post('/api/vehicles/:id/restock', auth, admin, (req: Request, res: Response)
   }
 
   v.quantity += quantityToAdd;
+  saveStore();
   res.json({ data: mapVehicle(v) });
 });
 
@@ -358,14 +398,32 @@ app.post('/api/vehicles/:id/purchase', auth, (req: AuthedRequest, res: Response)
     user_id: req.user!.sub,
     vehicle_id: vehicle.id,
     price: vehicle.price,
-    purchased_at: new Date().toISOString()
+    purchased_at: new Date().toISOString(),
+    make: vehicle.make,
+    model: vehicle.model,
+    category: vehicle.category,
+    fuelType: vehicle.fuel_type,
+    city: vehicle.city,
+    imageUrl: vehicle.image_url
   };
 
   purchases.push(purchaseRecord);
+  saveStore();
 
   res.json({
     message: 'Purchase confirmed',
-    data: mapVehicle(vehicle)
+    data: mapVehicle(vehicle),
+    purchase: {
+      id: purchaseRecord.id,
+      purchased_at: purchaseRecord.purchased_at,
+      price: vehicle.price,
+      make: vehicle.make,
+      model: vehicle.model,
+      category: vehicle.category,
+      fuelType: vehicle.fuel_type,
+      city: vehicle.city,
+      imageUrl: vehicle.image_url
+    }
   });
 });
 
@@ -379,17 +437,43 @@ app.get('/api/purchases/me', auth, (req: AuthedRequest, res: Response) => {
         id: p.id,
         purchased_at: p.purchased_at,
         price: p.price,
-        make: v?.make,
-        model: v?.model,
-        category: v?.category,
-        fuelType: v?.fuel_type,
-        city: v?.city,
-        imageUrl: v?.image_url
+        make: v?.make ?? p.make ?? 'Certified Model',
+        model: v?.model ?? p.model ?? '',
+        category: v?.category ?? p.category ?? 'Vehicle',
+        fuelType: v?.fuel_type ?? p.fuelType ?? 'Petrol',
+        city: v?.city ?? p.city ?? null,
+        imageUrl: v?.image_url ?? p.imageUrl ?? null
       };
     })
     .sort((a, b) => b.purchased_at.localeCompare(a.purchased_at));
 
   res.json({ data: userPurchases });
+});
+
+// Purchases: Sync client-side purchases across serverless instances
+app.post('/api/purchases/sync', auth, (req: AuthedRequest, res: Response) => {
+  const incoming = req.body?.purchases;
+  if (Array.isArray(incoming)) {
+    for (const item of incoming) {
+      if (item && item.id && !purchases.some(p => p.id === item.id)) {
+        purchases.push({
+          id: item.id,
+          user_id: req.user!.sub,
+          vehicle_id: item.vehicleId || item.id,
+          price: item.price || 0,
+          purchased_at: item.purchased_at || new Date().toISOString(),
+          make: item.make,
+          model: item.model,
+          category: item.category,
+          fuelType: item.fuelType,
+          city: item.city,
+          imageUrl: item.imageUrl
+        });
+      }
+    }
+    saveStore();
+  }
+  res.json({ success: true, count: purchases.length });
 });
 
 // Dashboard: Operational Metrics (Admin)
