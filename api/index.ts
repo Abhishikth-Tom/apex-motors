@@ -146,6 +146,7 @@ app.use(express.json());
 
 // Normalise /api prefix if stripped by Vercel rewrite
 app.use((req: Request, _res: Response, next: NextFunction) => {
+  loadStore();
   if (!req.url.startsWith('/api')) {
     req.url = '/api' + req.url;
   }
@@ -369,7 +370,7 @@ app.delete('/api/vehicles/:id', auth, admin, (req: Request, res: Response) => {
 
 // Vehicles: Restock (Admin)
 app.post('/api/vehicles/:id/restock', auth, admin, (req: Request, res: Response) => {
-  const quantityToAdd = req.body.quantity;
+  const quantityToAdd = Number(req.body.quantity);
   if (!Number.isInteger(quantityToAdd) || quantityToAdd <= 0) {
     return res.status(400).json({ message: 'Restock quantity must be a positive integer' });
   }
@@ -379,9 +380,42 @@ app.post('/api/vehicles/:id/restock', auth, admin, (req: Request, res: Response)
     return res.status(404).json({ message: 'Vehicle not found' });
   }
 
-  v.quantity += quantityToAdd;
+  v.quantity = Number(v.quantity) + quantityToAdd;
   saveStore();
   res.json({ data: mapVehicle(v) });
+});
+
+// Vehicles: Sync inventory updates
+app.post('/api/vehicles/sync', auth, admin, (req: Request, res: Response) => {
+  const incoming = req.body?.vehicles;
+  if (Array.isArray(incoming)) {
+    for (const item of incoming) {
+      if (item && item.id) {
+        const existing = vehicles.find(x => x.id === item.id);
+        if (existing) {
+          if (item.quantity !== undefined) existing.quantity = Number(item.quantity);
+        } else {
+          vehicles.push({
+            id: item.id,
+            make: item.make,
+            model: item.model,
+            category: item.category,
+            price: Number(item.price),
+            quantity: Number(item.quantity),
+            year: item.year,
+            kms_driven: item.kmsDriven ?? item.kms_driven ?? 0,
+            fuel_type: item.fuelType ?? item.fuel_type ?? 'Petrol',
+            city: item.city,
+            image_url: item.imageUrl ?? item.image_url,
+            description: item.description,
+            created_at: item.createdAt ?? item.created_at ?? new Date().toISOString()
+          });
+        }
+      }
+    }
+    saveStore();
+  }
+  res.json({ success: true, count: vehicles.length });
 });
 
 // Purchases: Atomic Purchase

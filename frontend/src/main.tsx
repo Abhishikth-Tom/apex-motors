@@ -33,7 +33,14 @@ export function App() {
     }
   });
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
+    try {
+      const saved = localStorage.getItem('apex-inventory-vehicles');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [health, setHealth] = useState<InventoryHealth | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
@@ -97,7 +104,37 @@ export function App() {
 
       if (vRes.ok) {
         const vData = await vRes.json();
-        setVehicles(vData.data || []);
+        const serverVehicles: Vehicle[] = vData.data || [];
+
+        // Check if there are local inventory overrides/restocks
+        let localVehicles: Vehicle[] = [];
+        try {
+          localVehicles = JSON.parse(localStorage.getItem('apex-inventory-vehicles') || '[]');
+        } catch {}
+
+        if (localVehicles.length > 0) {
+          const merged = serverVehicles.map((sv) => {
+            const lv = localVehicles.find((l) => l.id === sv.id);
+            if (lv && lv.quantity !== undefined) {
+              return { ...sv, quantity: lv.quantity };
+            }
+            return sv;
+          });
+          localVehicles.forEach((lv) => {
+            if (!merged.some((m) => m.id === lv.id)) {
+              merged.push(lv);
+            }
+          });
+          setVehicles(merged);
+          try {
+            localStorage.setItem('apex-inventory-vehicles', JSON.stringify(merged));
+          } catch {}
+        } else {
+          setVehicles(serverVehicles);
+          try {
+            localStorage.setItem('apex-inventory-vehicles', JSON.stringify(serverVehicles));
+          } catch {}
+        }
       }
 
       if (pRes.ok) {
@@ -246,6 +283,15 @@ export function App() {
         setPurchases(updated);
       }
 
+      // Update local vehicle stock immediately so buyer and admin views reflect it instantly
+      setVehicles((prev) => {
+        const updated = prev.map((v) => (v.id === vehicle.id ? { ...v, quantity: Math.max(0, v.quantity - 1) } : v));
+        try {
+          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
       setNotice(`Congratulations! Your purchase of the ${vehicle.make} ${vehicle.model} has been confirmed.`);
       if (selectedVehicle?.id === vehicle.id) {
         setSelectedVehicle(null);
@@ -272,6 +318,16 @@ export function App() {
         return false;
       }
       setNotice(`Added ${data.data.make} ${data.data.model} to inventory.`);
+
+      // Update state and persistent cache immediately
+      setVehicles((prev) => {
+        const updated = [data.data, ...prev.filter((v) => v.id !== data.data.id)];
+        try {
+          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
       await loadData();
       return true;
     } catch {
@@ -294,6 +350,16 @@ export function App() {
         return false;
       }
       setNotice(`Updated ${data.data.make} ${data.data.model}.`);
+
+      // Update state and persistent cache immediately
+      setVehicles((prev) => {
+        const updated = prev.map((v) => (v.id === id ? data.data : v));
+        try {
+          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
       await loadData();
       return true;
     } catch {
@@ -316,6 +382,43 @@ export function App() {
         return false;
       }
       setNotice(`Restocked ${data.data.make} ${data.data.model}. New quantity: ${data.data.quantity}.`);
+
+      // Immediately update vehicles state so Admin Table & Customer Showroom reflect new stock
+      setVehicles((prev) => {
+        const updated = prev.map((v) => (v.id === id ? { ...v, quantity: data.data.quantity } : v));
+        try {
+          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
+        } catch {}
+
+        // Sync updated vehicles array to server in background
+        fetch(`${API}/vehicles/sync`, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ vehicles: updated })
+        }).catch(() => {});
+
+        return updated;
+      });
+
+      // Immediately update dashboard inventory health so total units and valuation update on screen
+      setHealth((prev) => {
+        if (!prev) return null;
+        const newQty = data.data.quantity;
+        const oldQty = newQty - quantity;
+        const wasSoldOut = oldQty === 0;
+        const wasLowStock = oldQty >= 1 && oldQty <= 2;
+        const isNowLowStock = newQty >= 1 && newQty <= 2;
+        const isNowSoldOut = newQty === 0;
+
+        return {
+          ...prev,
+          units: prev.units + quantity,
+          value: prev.value + quantity * (data.data.price || 0),
+          lowStock: Math.max(0, prev.lowStock - (wasLowStock ? 1 : 0) + (isNowLowStock ? 1 : 0)),
+          soldOut: Math.max(0, prev.soldOut - (wasSoldOut ? 1 : 0) + (isNowSoldOut ? 1 : 0))
+        };
+      });
+
       await loadData();
       return true;
     } catch {
@@ -337,6 +440,16 @@ export function App() {
         return false;
       }
       setNotice('Vehicle removed from inventory.');
+
+      // Update state and persistent cache immediately
+      setVehicles((prev) => {
+        const updated = prev.filter((v) => v.id !== id);
+        try {
+          localStorage.setItem('apex-inventory-vehicles', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
       await loadData();
       return true;
     } catch {

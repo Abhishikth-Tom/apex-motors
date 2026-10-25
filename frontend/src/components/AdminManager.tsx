@@ -576,37 +576,44 @@ export const AdminManager: React.FC<AdminManagerProps> = ({
                   required
                   type="number"
                   min="1"
-                  className="w-full h-10 px-3 text-base font-bold font-mono text-[#183c32] border border-[#ddd9cf] rounded-sm outline-none"
+                  className="w-full h-10 px-3 text-base font-bold font-mono text-[#183c32] bg-white border border-[#ddd9cf] rounded-sm outline-none focus:border-[#183c32]"
                   value={restockAmount}
                   onChange={(e) => setRestockAmount(e.target.value)}
                 />
               </div>
 
               <div className="flex gap-2">
-                {[1, 2, 5, 10].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setRestockAmount(String(preset))}
-                    className="flex-1 py-1.5 border border-[#ddd9cf] hover:border-[#183c32] rounded-sm font-mono text-xs"
-                  >
-                    +{preset}
-                  </button>
-                ))}
+                {[1, 2, 5, 10].map((preset) => {
+                  const isSelected = restockAmount === String(preset);
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setRestockAmount(String(preset))}
+                      className={`flex-1 py-2 rounded-sm font-mono text-xs font-bold transition-all ${
+                        isSelected
+                          ? 'bg-[#183c32] text-white border border-[#183c32] shadow-xs'
+                          : 'bg-white text-[#183c32] border border-[#ddd9cf] hover:border-[#183c32] hover:bg-[#faf8f4]'
+                      }`}
+                    >
+                      +{preset}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="pt-3 flex justify-end gap-2 border-t border-[#ede9e1]">
                 <button
                   type="button"
                   onClick={() => setRestockVehicleTarget(null)}
-                  className="px-4 py-2 border border-[#ddd9cf] rounded-sm font-mono uppercase"
+                  className="px-4 py-2 border border-[#ddd9cf] hover:border-[#183c32] text-[#48534d] hover:text-[#183c32] bg-white rounded-sm font-mono text-xs uppercase font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-[#183c32] hover:bg-[#235447] text-white rounded-sm font-mono uppercase tracking-wider"
+                  className="px-5 py-2 bg-[#183c32] hover:bg-[#235447] text-white rounded-sm font-mono text-xs uppercase tracking-wider font-bold transition-colors shadow-xs disabled:opacity-50"
                 >
                   {submitting ? 'Restocking...' : 'Confirm Restock'}
                 </button>

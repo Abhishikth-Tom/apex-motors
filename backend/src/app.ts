@@ -268,7 +268,7 @@ export function createApp(db: Db) {
 
   // Protected & Admin-only: restock vehicle
   app.post('/api/vehicles/:id/restock', auth, admin, (req, res) => {
-    const quantityToAdd = req.body.quantity;
+    const quantityToAdd = Number(req.body.quantity);
     if (!Number.isInteger(quantityToAdd) || quantityToAdd <= 0) {
       return res.status(400).json({ message: 'Restock quantity must be a positive integer' });
     }
